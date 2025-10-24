@@ -1,177 +1,269 @@
 import java.util.*;
-import java.util.concurrent.*;
 
-interface ICostCalculationStrategy {
-    double calculateCost(double distance, String serviceClass, int passengers, boolean hasDiscount, boolean hasLuggage);
+interface ICommand {
+    void execute();
+    void undo();
 }
 
-class PlaneCostStrategy implements ICostCalculationStrategy {
-    public double calculateCost(double distance, String serviceClass, int passengers, boolean hasDiscount, boolean hasLuggage) {
-        double base = distance * 0.5;
-        if (serviceClass.equalsIgnoreCase("business")) base *= 1.8;
-        if (hasLuggage) base += 50;
-        if (hasDiscount) base *= 0.9;
-        return base * passengers;
+class Light {
+    void on() { System.out.println("Light is ON"); }
+    void off() { System.out.println("Light is OFF"); }
+}
+
+class TV {
+    void on() { System.out.println("TV is ON"); }
+    void off() { System.out.println("TV is OFF"); }
+}
+
+class AirConditioner {
+    void on() { System.out.println("AC is ON"); }
+    void off() { System.out.println("AC is OFF"); }
+}
+
+class LightOnCommand implements ICommand {
+    private Light light;
+    public LightOnCommand(Light light) { this.light = light; }
+    public void execute() { light.on(); }
+    public void undo() { light.off(); }
+}
+
+class LightOffCommand implements ICommand {
+    private Light light;
+    public LightOffCommand(Light light) { this.light = light; }
+    public void execute() { light.off(); }
+    public void undo() { light.on(); }
+}
+
+class TVOnCommand implements ICommand {
+    private TV tv;
+    public TVOnCommand(TV tv) { this.tv = tv; }
+    public void execute() { tv.on(); }
+    public void undo() { tv.off(); }
+}
+
+class TVOffCommand implements ICommand {
+    private TV tv;
+    public TVOffCommand(TV tv) { this.tv = tv; }
+    public void execute() { tv.off(); }
+    public void undo() { tv.on(); }
+}
+
+class ACOnCommand implements ICommand {
+    private AirConditioner ac;
+    public ACOnCommand(AirConditioner ac) { this.ac = ac; }
+    public void execute() { ac.on(); }
+    public void undo() { ac.off(); }
+}
+
+class ACOffCommand implements ICommand {
+    private AirConditioner ac;
+    public ACOffCommand(AirConditioner ac) { this.ac = ac; }
+    public void execute() { ac.off(); }
+    public void undo() { ac.on(); }
+}
+
+class MacroCommand implements ICommand {
+    private List<ICommand> commands;
+    public MacroCommand(List<ICommand> commands) { this.commands = commands; }
+    public void execute() { for (ICommand cmd : commands) cmd.execute(); }
+    public void undo() { for (ICommand cmd : commands) cmd.undo(); }
+}
+
+class RemoteControl {
+    private Map<String, ICommand> commandSlots = new HashMap<>();
+    private Stack<ICommand> undoStack = new Stack<>();
+    private Stack<ICommand> redoStack = new Stack<>();
+
+    public void setCommand(String slot, ICommand command) {
+        commandSlots.put(slot, command);
     }
-}
 
-class TrainCostStrategy implements ICostCalculationStrategy {
-    public double calculateCost(double distance, String serviceClass, int passengers, boolean hasDiscount, boolean hasLuggage) {
-        double base = distance * 0.2;
-        if (serviceClass.equalsIgnoreCase("business")) base *= 1.3;
-        if (hasLuggage) base += 10;
-        if (hasDiscount) base *= 0.85;
-        return base * passengers;
-    }
-}
-
-class BusCostStrategy implements ICostCalculationStrategy {
-    public double calculateCost(double distance, String serviceClass, int passengers, boolean hasDiscount, boolean hasLuggage) {
-        double base = distance * 0.1;
-        if (serviceClass.equalsIgnoreCase("business")) base *= 1.2;
-        if (hasLuggage) base += 5;
-        if (hasDiscount) base *= 0.8;
-        return base * passengers;
-    }
-}
-
-class TravelBookingContext {
-    private ICostCalculationStrategy strategy;
-
-    public void setStrategy(ICostCalculationStrategy strategy) {
-        this.strategy = strategy;
-    }
-
-    public double calculate(double distance, String serviceClass, int passengers, boolean hasDiscount, boolean hasLuggage) {
-        if (strategy == null) throw new IllegalStateException("Strategy not selected!");
-        return strategy.calculateCost(distance, serviceClass, passengers, hasDiscount, hasLuggage);
-    }
-}
-
-interface IObserver {
-    void update(String stockName, double newPrice);
-    String getName();
-}
-
-interface ISubject {
-    void addObserver(String stockName, IObserver observer);
-    void removeObserver(String stockName, IObserver observer);
-    void notifyObservers(String stockName, double newPrice);
-}
-
-class StockExchange implements ISubject {
-    private Map<String, Double> stocks = new HashMap<>();
-    private Map<String, List<IObserver>> observers = new HashMap<>();
-    private ExecutorService executor = Executors.newCachedThreadPool();
-
-    public void addStock(String name, double price) {
-        stocks.put(name, price);
-        observers.putIfAbsent(name, new ArrayList<>());
-        System.out.println("Stock added: " + name + " - " + price);
-    }
-
-    public void updateStock(String name, double newPrice) {
-        if (!stocks.containsKey(name)) {
-            System.out.println("Stock not found: " + name);
+    public void pressButton(String slot) {
+        ICommand command = commandSlots.get(slot);
+        if (command == null) {
+            System.out.println("No command assigned to slot: " + slot);
             return;
         }
-        stocks.put(name, newPrice);
-        System.out.println("\nStock updated: " + name + " -> " + newPrice);
-        notifyObservers(name, newPrice);
+        command.execute();
+        undoStack.push(command);
+        redoStack.clear();
     }
 
-    public void addObserver(String stockName, IObserver observer) {
-        observers.putIfAbsent(stockName, new ArrayList<>());
-        observers.get(stockName).add(observer);
-        System.out.println(observer.getName() + " subscribed to " + stockName);
+    public void undo() {
+        if (!undoStack.isEmpty()) {
+            ICommand command = undoStack.pop();
+            command.undo();
+            redoStack.push(command);
+        } else System.out.println("Nothing to undo");
     }
 
-    public void removeObserver(String stockName, IObserver observer) {
-        if (observers.containsKey(stockName)) {
-            observers.get(stockName).remove(observer);
-            System.out.println(observer.getName() + " unsubscribed from " + stockName);
+    public void redo() {
+        if (!redoStack.isEmpty()) {
+            ICommand command = redoStack.pop();
+            command.execute();
+            undoStack.push(command);
+        } else System.out.println("Nothing to redo");
+    }
+}
+
+abstract class ReportGenerator {
+    public final void generateReport() {
+        collectData();
+        formatData();
+        createDocument();
+        if (customerWantsSave()) saveReport();
+        if (customerWantsSendEmail()) sendEmail();
+    }
+
+    abstract void collectData();
+    abstract void formatData();
+    abstract void createDocument();
+    abstract void saveReport();
+
+    boolean customerWantsSave() { return true; }
+    boolean customerWantsSendEmail() { return false; }
+    void sendEmail() { System.out.println("Sending report by email..."); }
+}
+
+class PdfReport extends ReportGenerator {
+    void collectData() { System.out.println("Collecting data for PDF..."); }
+    void formatData() { System.out.println("Formatting PDF data..."); }
+    void createDocument() { System.out.println("Creating PDF document..."); }
+    void saveReport() { System.out.println("Saving PDF report..."); }
+}
+
+class ExcelReport extends ReportGenerator {
+    void collectData() { System.out.println("Collecting data for Excel..."); }
+    void formatData() { System.out.println("Formatting Excel cells..."); }
+    void createDocument() { System.out.println("Creating Excel file..."); }
+    void saveReport() { System.out.println("Saving Excel report..."); }
+}
+
+class HtmlReport extends ReportGenerator {
+    void collectData() { System.out.println("Collecting data for HTML..."); }
+    void formatData() { System.out.println("Formatting HTML tags..."); }
+    void createDocument() { System.out.println("Creating HTML page..."); }
+    void saveReport() { System.out.println("Saving HTML file..."); }
+    boolean customerWantsSendEmail() { return true; }
+}
+
+interface IMediator {
+    void sendMessage(String message, User user, String channelName);
+    void addUser(User user, String channelName);
+    void removeUser(User user, String channelName);
+}
+
+class ChannelMediator implements IMediator {
+    private Map<String, List<User>> channels = new HashMap<>();
+
+    public void sendMessage(String message, User user, String channelName) {
+        if (!channels.containsKey(channelName)) {
+            System.out.println("Channel " + channelName + " does not exist.");
+            return;
+        }
+        for (User u : channels.get(channelName)) {
+            if (u != user) u.receive(message, user, channelName);
         }
     }
 
-    public void notifyObservers(String stockName, double newPrice) {
-        List<IObserver> list = observers.get(stockName);
-        if (list == null) return;
-        for (IObserver obs : list) {
-            executor.submit(() -> obs.update(stockName, newPrice));
+    public void addUser(User user, String channelName) {
+        channels.putIfAbsent(channelName, new ArrayList<>());
+        channels.get(channelName).add(user);
+        System.out.println(user.getName() + " joined channel " + channelName);
+    }
+
+    public void removeUser(User user, String channelName) {
+        if (channels.containsKey(channelName)) {
+            channels.get(channelName).remove(user);
+            System.out.println(user.getName() + " left channel " + channelName);
         }
     }
 }
 
-class Trader implements IObserver {
-    private String name;
-    public Trader(String name) { this.name = name; }
-    public String getName() { return name; }
+abstract class User {
+    protected IMediator mediator;
+    protected String name;
 
-    public void update(String stockName, double newPrice) {
-        System.out.println(name + " received update: " + stockName + " new price = " + newPrice);
-    }
-}
-
-class TradingRobot implements IObserver {
-    private String name;
-    private double buyThreshold, sellThreshold;
-
-    public TradingRobot(String name, double buyThreshold, double sellThreshold) {
+    public User(IMediator mediator, String name) {
+        this.mediator = mediator;
         this.name = name;
-        this.buyThreshold = buyThreshold;
-        this.sellThreshold = sellThreshold;
     }
 
     public String getName() { return name; }
 
-    public void update(String stockName, double newPrice) {
-        System.out.println(name + " robot analyzing " + stockName + " price = " + newPrice);
-        if (newPrice <= buyThreshold) System.out.println(name + " decides to BUY " + stockName);
-        else if (newPrice >= sellThreshold) System.out.println(name + " decides to SELL " + stockName);
-        else System.out.println(name + " decides to HOLD " + stockName);
+    public abstract void send(String message, String channelName);
+    public abstract void receive(String message, User sender, String channelName);
+}
+
+class ChatUser extends User {
+    public ChatUser(IMediator mediator, String name) {
+        super(mediator, name);
+    }
+
+    public void send(String message, String channelName) {
+        System.out.println(name + " sends message in " + channelName + ": " + message);
+        mediator.sendMessage(message, this, channelName);
+    }
+
+    public void receive(String message, User sender, String channelName) {
+        System.out.println(name + " receives from " + sender.getName() + " in " + channelName + ": " + message);
     }
 }
 
 public class Main {
     public static void main(String[] args) {
-        System.out.println("=== STRATEGY PATTERN ===");
-        TravelBookingContext context = new TravelBookingContext();
+        // -------- COMMAND ----------
+        System.out.println("\n=== COMMAND PATTERN ===");
+        Light light = new Light();
+        TV tv = new TV();
+        AirConditioner ac = new AirConditioner();
 
-        context.setStrategy(new PlaneCostStrategy());
-        double cost1 = context.calculate(1500, "business", 2, true, true);
-        System.out.println("Plane cost: " + cost1);
+        RemoteControl remote = new RemoteControl();
+        remote.setCommand("lightOn", new LightOnCommand(light));
+        remote.setCommand("lightOff", new LightOffCommand(light));
+        remote.setCommand("tvOn", new TVOnCommand(tv));
+        remote.setCommand("tvOff", new TVOffCommand(tv));
+        remote.setCommand("acOn", new ACOnCommand(ac));
+        remote.setCommand("acOff", new ACOffCommand(ac));
 
-        context.setStrategy(new TrainCostStrategy());
-        double cost2 = context.calculate(800, "econom", 3, false, true);
-        System.out.println("Train cost: " + cost2);
+        remote.pressButton("lightOn");
+        remote.pressButton("tvOn");
+        remote.undo();
+        remote.redo();
 
-        context.setStrategy(new BusCostStrategy());
-        double cost3 = context.calculate(500, "econom", 4, true, false);
-        System.out.println("Bus cost: " + cost3);
+        List<ICommand> party = Arrays.asList(
+                new LightOnCommand(light),
+                new TVOnCommand(tv),
+                new ACOnCommand(ac)
+        );
+        remote.setCommand("partyMode", new MacroCommand(party));
+        remote.pressButton("partyMode");
+        remote.undo();
 
-        System.out.println("\n=== OBSERVER PATTERN ===");
-        StockExchange exchange = new StockExchange();
-        exchange.addStock("AAPL", 150);
-        exchange.addStock("TSLA", 250);
+        System.out.println("\n=== TEMPLATE METHOD PATTERN ===");
+        ReportGenerator pdf = new PdfReport();
+        ReportGenerator excel = new ExcelReport();
+        ReportGenerator html = new HtmlReport();
+        pdf.generateReport();
+        excel.generateReport();
+        html.generateReport();
 
-        Trader alice = new Trader("Alice");
-        Trader bob = new Trader("Bob");
-        TradingRobot robo1 = new TradingRobot("AutoBot", 140, 260);
 
-        exchange.addObserver("AAPL", alice);
-        exchange.addObserver("AAPL", robo1);
-        exchange.addObserver("TSLA", bob);
-        exchange.addObserver("TSLA", robo1);
+        System.out.println("\n=== MEDIATOR PATTERN ===");
+        ChannelMediator chat = new ChannelMediator();
+        User alice = new ChatUser(chat, "Alice");
+        User bob = new ChatUser(chat, "Bob");
+        User charlie = new ChatUser(chat, "Charlie");
 
-        exchange.updateStock("AAPL", 145);
-        exchange.updateStock("AAPL", 135);
-        exchange.updateStock("TSLA", 265);
+        chat.addUser(alice, "general");
+        chat.addUser(bob, "general");
+        chat.addUser(charlie, "music");
 
-        exchange.removeObserver("TSLA", bob);
-        exchange.updateStock("TSLA", 240);
+        alice.send("Hello everyone!", "general");
+        bob.send("Hi Alice!", "general");
+        charlie.send("Anyone here loves music?", "music");
 
-        exchange.updateStock("GOOG", 3000);
-
-        try { Thread.sleep(1000); } catch (Exception ignored) {}
+        chat.removeUser(bob, "general");
+        alice.send("Bye Bob!", "general");
     }
 }
